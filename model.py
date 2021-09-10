@@ -1,5 +1,6 @@
+from typing_extensions import Concatenate
 import tensorflow as tf
-from tensorflow.keras.layers import LayerNormalization, MultiHeadAttention, Dropout, Dense, Input, Add
+from tensorflow.keras.layers import LayerNormalization, MultiHeadAttention, Dropout, Dense, Input, Add, Concatenate
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import ReLU, Conv2D, BatchNormalization, Dropout
 from PatchProcessing import *
@@ -14,7 +15,7 @@ def MLP(x, hidden_units, dropout_rate):
 
 ### ENCODER RELATED CODE ###
 
-def GetBORTFirstLayer(input_seq, target_seq,
+def GetBROLYFirstLayer(input_seq, target_seq,
                       embedding_dim, n_heads, ff_dim,
                       num_patches,
                       dropout_rate=0.1):
@@ -55,7 +56,7 @@ def GetBORTFirstLayer(input_seq, target_seq,
   return x
 
 
-def GetBORTEncoderLayer(input_seq,
+def GetBROLYEncoderLayer(input_seq,
                         embedding_dim, n_heads, ff_dim,
                         dropout_rate=0.1):
   x = LayerNormalization(epsilon=1e-6)(input_seq)
@@ -123,9 +124,69 @@ def GetDecoderLayer(context_vector, decoder_in, la_mask,
 
   return x
 
-######
 
-def GetBORTTransformer(input_shape, target_shape, seq_len, embedding_dim, ff_depth,
+def GetBROLYFirstStage(input_shape, target_shape, embedding_dim, ff_depth, attention_heads, combination_type, num_layers):
+  input_in = Input(shape=input_shape, name="source_img")
+  input_tar = Input(shape=target_shape, name="target_img")
+
+  ##TODO - Set num patches by size with parameters
+  n_patches = (224//64)**2 
+
+  ## Encoder first layer
+  x = GetBROLYFirstLayer(input_in, 
+                         input_tar, 
+                         embedding_dim, 
+                         attention_heads, 
+                         ff_depth, n_patches)
+  
+  hidden_layers = []
+  last_hidden_layer = x
+  for _ in range(num_layers):
+    last_hidden_layer = GetBROLYEncoderLayer(last_hidden_layer, embedding_dim, attention_heads, ff_depth)
+    hidden_layers.append(last_hidden_layer)
+  
+  print("[SUCCESS] - BROLY Encoder created")
+  
+  ### EMBEDDING CONCATENATION PHASE ###
+
+  ## Embedding = Last Hidden Layer
+  if combination_type == 0:
+    x = last_hidden_layer
+
+  ## Embedding = Sum of all layers
+  if combination_type == 1:
+    x = Add()(hidden_layers)
+  
+  ## Embedding = Second-to-last hidden layer
+  if combination_type == 2:
+    x = hidden_layers[-2]
+  
+  ## Embedding = Sum of the last four hidden layers
+  if combination_type == 3:
+    x = Add()(hidden_layers[-4:])
+  
+  if combination_type == 4:
+    x = Concatenate()(hidden_layers[-4:])
+
+  ########
+
+  # PREDICTION PHASE
+  flip_x = Dense(1, activation="sigmoid")(x)
+  flip_y = Dense(1, activation="sigmoid")(x)
+  dilation = Dense(1, activation="sigmoid")(x)
+  inversion = Dense(1, activation="sigmoid")(x)
+
+  ## Now we have to construct or output for the BROLY encoder
+  model = Model([input_in, input_tar], [flip_x, flip_y, dilation, inversion])
+  transformer_optimizer = Get_Custom_Adam_Optimizer(embedding_dim)
+  model.compile(optimizer= transformer_optimizer, loss= 'binary_crossentropy')
+  model.summary()
+  return model
+
+
+###### FULL TRANSFORMER MODEL
+
+def GetBROLYTransformer(input_shape, target_shape, seq_len, embedding_dim, ff_depth,
                        attention_heads, num_layers_encoder, num_layers_decoder, num_instructions):
   input_in = Input(shape=input_shape, name="Source image")
   input_tar = Input(shape=target_shape, name="Target image")
@@ -160,7 +221,7 @@ def GetBORTTransformer(input_shape, target_shape, seq_len, embedding_dim, ff_dep
   return model
 
 
-def GetBORTTransformerCNN(input_shape, target_shape, seq_len, embedding_dim, ff_depth,
+def GetBROLYTransformerCNN(input_shape, target_shape, seq_len, embedding_dim, ff_depth,
                        attention_heads, num_layers_encoder, num_layers_decoder, num_instructions):
   input_in = Input(shape=input_shape, name="Source image")
   input_tar = Input(shape=target_shape, name="Target image")
