@@ -1,10 +1,11 @@
-from typing_extensions import Concatenate
 import tensorflow as tf
-from tensorflow.keras.layers import LayerNormalization, MultiHeadAttention, Dropout, Dense, Input, Add, Concatenate
+from tensorflow.keras.layers import LayerNormalization, MultiHeadAttention, Dropout, Dense, Input, Add, Concatenate, Flatten
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import ReLU, Conv2D, BatchNormalization, Dropout
 from PatchProcessing import *
 from TransformerMeta import *
+
+patch_size = 64
 
 def MLP(x, hidden_units, dropout_rate):
     for units in hidden_units:
@@ -151,35 +152,37 @@ def GetBROLYFirstStage(input_shape, target_shape, embedding_dim, ff_depth, atten
 
   ## Embedding = Last Hidden Layer
   if combination_type == 0:
-    x = last_hidden_layer
+    x = Flatten()(last_hidden_layer)
 
   ## Embedding = Sum of all layers
   if combination_type == 1:
-    x = Add()(hidden_layers)
+    x = Flatten()(Add()(hidden_layers))
   
   ## Embedding = Second-to-last hidden layer
   if combination_type == 2:
-    x = hidden_layers[-2]
+    x = Flatten()(hidden_layers[-2])
   
   ## Embedding = Sum of the last four hidden layers
   if combination_type == 3:
-    x = Add()(hidden_layers[-4:])
+    x = Flatten()(Add()(hidden_layers[-4:]))
   
   if combination_type == 4:
-    x = Concatenate()(hidden_layers[-4:])
+    x = Flatten()(Concatenate()(hidden_layers[-4:]))
 
   ########
 
   # PREDICTION PHASE
-  flip_x = Dense(1, activation="sigmoid")(x)
-  flip_y = Dense(1, activation="sigmoid")(x)
-  dilation = Dense(1, activation="sigmoid")(x)
-  inversion = Dense(1, activation="sigmoid")(x)
+  #flip_x = Dense(1, activation="sigmoid")(x)
+  #flip_y = Dense(1, activation="sigmoid")(x)
+  #zoom = Dense(1, activation="sigmoid")(x)
+  #blur = Dense(1, activation="sigmoid")(x)
+  #inversion = Dense(1, activation="sigmoid")(x)
+  output = Dense(5, activation="sigmoid")(x)
 
   ## Now we have to construct or output for the BROLY encoder
-  model = Model([input_in, input_tar], [flip_x, flip_y, dilation, inversion])
+  model = Model([input_in, input_tar], output)
   transformer_optimizer = Get_Custom_Adam_Optimizer(embedding_dim)
-  model.compile(optimizer= transformer_optimizer, loss= 'binary_crossentropy')
+  model.compile(optimizer= transformer_optimizer, loss= 'categorical_crossentropy')
   model.summary()
   return model
 
@@ -196,10 +199,10 @@ def GetBROLYTransformer(input_shape, target_shape, seq_len, embedding_dim, ff_de
   n_patches = (224 // 64) ** 2
 
   ## First BORT Layer
-  x = GetBORTFirstLayer(input_in, input_tar, embedding_dim, attention_heads, ff_depth, n_patches) 
+  x = GetBROLYFirstLayer(input_in, input_tar, embedding_dim, attention_heads, ff_depth, n_patches) 
   print(x.shape)
   for _ in range(num_layers_encoder):
-    x = GetBORTEncoderLayer(x, embedding_dim, attention_heads, ff_depth)
+    x = GetBROLYEncoderLayer(x, embedding_dim, attention_heads, ff_depth)
 
   print("BORT CREATED!")  
   context_vector = tf.identity(x)
@@ -269,10 +272,10 @@ def GetBROLYTransformerCNN(input_shape, target_shape, seq_len, embedding_dim, ff
   n_patches = (224 // 64) ** 2
 
   ## First BORT Layer
-  x = GetBORTFirstLayer(cnn_in, cnn_tar, embedding_dim, attention_heads, ff_depth, n_patches) 
+  x = GetBROLYFirstLayer(cnn_in, cnn_tar, embedding_dim, attention_heads, ff_depth, n_patches) 
   print(x.shape)
   for _ in range(num_layers_encoder):
-    x = GetBORTEncoderLayer(x, embedding_dim, attention_heads, ff_depth)
+    x = GetBROLYEncoderLayer(x, embedding_dim, attention_heads, ff_depth)
 
   print("BORT CREATED!")  
   context_vector = tf.identity(x)
