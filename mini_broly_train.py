@@ -1,14 +1,14 @@
 from model import GetBROLYFirstStage
 from DataGenerator import DataGen
 import numpy as np
-import tqdm
+from sklearn.metrics import accuracy_score
 
 def hamming_distance(a, b):
     return len([i for i in filter(lambda x: x[0] != x[1], zip(a, b))])
 
 def test_BROLY_model(model, generator, epoch):
     total_hamming_distance = 0
-    good = 0
+    global_accuracy = 0
     for _ in range(generator.get_val_size() // 16 ):
         X_source, X_target, Y = generator.val_batch(16)
         predictions = model.predict([X_source, X_target])
@@ -16,11 +16,9 @@ def test_BROLY_model(model, generator, epoch):
         predictions[predictions<0.5] = 0
         for idx, prediction in enumerate(predictions):
             total_hamming_distance += hamming_distance(prediction, Y[idx])
-            for jdx, element in enumerate(prediction):
-                if element == Y[idx, jdx]:
-                    good += 1
+            global_accuracy += accuracy_score(Y[idx], prediction)
         
-    print(f"EPOCH: {epoch} || GLOBAL HAMMING DISTANCE: {total_hamming_distance} | MEAN HAMMING DISTANCE: {total_hamming_distance / generator.get_val_size()} | GLOBAL ACCURACY: {good / (generator.get_val_size() * 5)} ||")   
+    print(f"EPOCH: {epoch} || GLOBAL HAMMING DISTANCE: {total_hamming_distance} | MEAN HAMMING DISTANCE: {total_hamming_distance / generator.get_val_size()} | GLOBAL ACCURACY: {global_accuracy / generator.get_val_size()} ||")   
     
 
 def main():
