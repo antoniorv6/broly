@@ -177,7 +177,7 @@ def GetBROLYFirstStage(input_shape, target_shape, embedding_dim, ff_depth, atten
   #zoom = Dense(1, activation="sigmoid")(x)
   #blur = Dense(1, activation="sigmoid")(x)
   #inversion = Dense(1, activation="sigmoid")(x)
-  output = Dense(5, activation="sigmoid")(x)
+  output = Dense(10, activation="softmax")(x)
 
   ## Now we have to construct or output for the BROLY encoder
   model = Model([input_in, input_tar], output)
