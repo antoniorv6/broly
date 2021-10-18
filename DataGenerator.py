@@ -3,9 +3,20 @@ import os
 import numpy as np
 import tqdm
 from sklearn.model_selection import train_test_split 
+import random
 
 CONST_TEST_FOLDER = "Test/Generator/"
 
+bitwise_names = ["FlipH", 
+                                "FlipV", 
+                                "Zoom", 
+                                "Blur", 
+                                "Inversion",
+                                "Erosion",
+                                "Dilation",
+                                "Rot90",
+                                "Rot180",
+                                "None"]
 class DataGen:
     def __init__(self):
         images = os.listdir("Data")
@@ -18,7 +29,12 @@ class DataGen:
                                 self.flip_vertical, 
                                 self.zoom, 
                                 self.blur, 
-                                self.invert]
+                                self.invert,
+                                self.erode,
+                                self.dilate,
+                                self.rotate90,
+                                self.rotate180,
+                                self.none]
     
     def read_image(self, idxToRead, imagelist):
         return cv2.imread(f"Data/{imagelist[idxToRead]}")
@@ -41,7 +57,24 @@ class DataGen:
     
     def invert(self, image):
         return 255. - image
+
+    def erode(self, image):
+        kernel = np.ones((3,3), np.uint8)
+        return cv2.erode(image, kernel, iterations=1)
+
+    def dilate(self, image):
+        kernel = np.ones((3,3), np.uint8)
+        return cv2.dilate(image, kernel, iterations=1)
+
+    def rotate90(self, img):
+        return cv2.rotate(img, cv2.cv2.ROTATE_90_CLOCKWISE)
     
+    def rotate180(self, img):
+        return cv2.rotate(img, cv2.cv2.ROTATE_180)
+    
+    def none(self, image):
+        return image 
+
     def reset(self):
         self.images_index = 0
     
@@ -53,15 +86,23 @@ class DataGen:
         for idx_read in range(self.images_index, self.images_index+BATCH_SIZE):
             image = self.read_image(idx_read, self.images_list)
             edited_image = image
-            edition_process = [np.random.binomial(1,0.5) for _ in range(5)]
+            edition_process = [np.random.binomial(1,0.5) for _ in range(10)]
+            # First edition pass
             for idx in range(len(edition_process)):
                 if edition_process[idx]:
                     edited_image = self.bitwise_methods[idx](edited_image)
             
-            X_source.append(image)
-            X_target.append(edited_image)
-            Y.append(edition_process)
+            edition_to_detect = random.randint(0, len(self.bitwise_methods)-1)
 
+            edit = self.bitwise_methods[edition_to_detect](edited_image)
+
+            X_source.append(edited_image)
+            X_target.append(edit)
+
+            gt = np.zeros(len(self.bitwise_methods))
+            gt[edition_to_detect] = 1.
+
+            Y.append(gt)
 
         # Reset the index if we reach end of images list
         self.images_index += BATCH_SIZE
@@ -84,9 +125,17 @@ class DataGen:
                 if edition_process[idx]:
                     edited_image = self.bitwise_methods[idx](edited_image)
             
-            X_source.append(image)
-            X_target.append(edited_image)
-            Y.append(edition_process)
+            edition_to_detect = random.randint(0, len(self.bitwise_methods)-1)
+
+            edit = self.bitwise_methods[edition_to_detect](edited_image)
+
+            X_source.append(edited_image)
+            X_target.append(edit)
+
+            gt = np.zeros(len(self.bitwise_methods))
+            gt[edition_to_detect] = 1.
+
+            Y.append(gt)
 
         # PERFORM RANDOMLY THE FOUR OPERATIONS, EDIT THE IMAGE AND SET BITWISE RESULT
         # ADD TO THE X AND Y ARRAYS
@@ -108,14 +157,17 @@ def main():
     X_source = [] 
     X_target = [] 
     Y = []
-    for _ in tqdm.tqdm(range(1157)):
+    for elx in tqdm.tqdm(range(1157)):
         X_source, X_target, Y = dataGen.train_batch(BATCH_SIZE)
+        for i,element in enumerate(Y):
+            #imageName = ' '.join([str(elem) for elem in element]) + f"_{i}"
+            for idxed, bit in enumerate(element):
+                if bit == 1.0:
+                    break
+            
+            cv2.imwrite(CONST_TEST_FOLDER + str(elx + i) + "_" + bitwise_names[idxed] +  "_src.jpg", X_source[i])
+            cv2.imwrite(CONST_TEST_FOLDER + str(elx + i) + "_" + bitwise_names[idxed]  + "_tar.jpg", X_target[i])
     
-    print("WRITING IMAGES FOR TEST")
-    for i,element in enumerate(Y):
-        imageName = ' '.join([str(elem) for elem in element]) + f"_{i}"
-        cv2.imwrite(CONST_TEST_FOLDER + imageName + "_src.jpg", X_source[i])
-        cv2.imwrite(CONST_TEST_FOLDER + imageName + "_tar.jpg", X_target[i])
     print("IMAGES WRITTEN")
     
     pass

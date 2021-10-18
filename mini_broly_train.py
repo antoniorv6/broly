@@ -22,7 +22,7 @@ def test_BROLY_model(model, generator, epoch):
     
 
 def main():
-    model = GetBROLYFirstStage((224,224,3), (224,224,3), 64, [256, 128, 64], 8, 0, 12)
+    model = GetBROLYFirstStage((224,224,3), (224,224,3), 32, 4, 8, [128, 64], [16, 8], 5)
     generator = DataGen()
     BATCH_SIZE = 16
 
